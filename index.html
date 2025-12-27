@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TopEcoPro Demo - Hotel Alpenblick</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-slate-50">
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Demo hotel data
+    const demoHotel = {
+      id: 'demo',
+      name: 'Hotel Alpenblick',
+      rooms: {
+        1: [101, 102, 103, 104, 105, 106, 107, 108, 109, 110],
+        2: [201, 202, 203, 204, 205, 206, 207, 208, 209, 210],
+        3: [301, 302, 303, 304, 305, 306, 307, 308, 309, 310],
+        4: [401, 402, 403, 404, 405, 406, 407, 408, 409, 410]
+      }
+    };
+
+    // Generate fake room statuses
+    const generateRoomStatuses = () => {
+      const statuses = {};
+      const allRooms = Object.values(demoHotel.rooms).flat();
+      const now = new Date().toISOString().split('T')[0];
+      
+      allRooms.forEach((room, i) => {
+        // Mix of statuses for realistic look
+        const rand = Math.random();
+        let status = 'pending';
+        let inspected = false;
+        let cleanedBy = null;
+        let cleanedAt = null;
+        
+        if (rand < 0.45) {
+          // 45% inspected (green)
+          status = 'clean';
+          inspected = true;
+          cleanedBy = `Housekeeping ${Math.ceil(room / 100)}`;
+          cleanedAt = `${8 + Math.floor(Math.random() * 4)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`;
+        } else if (rand < 0.70) {
+          // 25% clean not inspected (blue)
+          status = 'clean';
+          cleanedBy = `Housekeeping ${Math.ceil(room / 100)}`;
+          cleanedAt = `${10 + Math.floor(Math.random() * 3)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`;
+        }
+        // 30% pending (gray)
+        
+        statuses[room] = { status, inspected, cleanedBy, cleanedAt, date: now };
+      });
+      
+      return statuses;
+    };
+
+    // Icons
+    const Icons = {
+      Check: ({ className }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>,
+      Search: ({ className }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+      Wifi: ({ className }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>,
+      LogOut: ({ className }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>,
+    };
+
+    function DemoApp() {
+      const [rooms, setRooms] = useState(generateRoomStatuses);
+      const [search, setSearch] = useState('');
+      const [filterFloor, setFilterFloor] = useState(0);
+      const [filterStatus, setFilterStatus] = useState('all');
+      const [selectedRoom, setSelectedRoom] = useState(null);
+      const [view, setView] = useState('hausdame'); // hausdame or housekeeping
+      const [showToast, setShowToast] = useState(null);
+
+      const today = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+      
+      const allRooms = Object.entries(demoHotel.rooms).flatMap(([floor, nums]) => 
+        nums.map(num => ({ number: num, floor: parseInt(floor), ...rooms[num] }))
+      );
+
+      const floors = Object.keys(demoHotel.rooms).map(Number).sort((a,b) => a - b);
+
+      const filteredRooms = allRooms.filter(room => {
+        if (search && !room.number.toString().includes(search)) return false;
+        if (filterFloor && room.floor !== filterFloor) return false;
+        if (filterStatus === 'pending' && (room.status === 'clean' || room.inspected)) return false;
+        if (filterStatus === 'clean' && room.status !== 'clean') return false;
+        if (filterStatus === 'inspected' && !room.inspected) return false;
+        return true;
+      });
+
+      const stats = {
+        total: allRooms.length,
+        pending: allRooms.filter(r => r.status === 'pending').length,
+        clean: allRooms.filter(r => r.status === 'clean' && !r.inspected).length,
+        inspected: allRooms.filter(r => r.inspected).length
+      };
+
+      const showNotification = (msg) => {
+        setShowToast(msg);
+        setTimeout(() => setShowToast(null), 2000);
+      };
+
+      const markClean = (roomNum) => {
+        setRooms(prev => ({
+          ...prev,
+          [roomNum]: { 
+            ...prev[roomNum], 
+            status: 'clean', 
+            cleanedBy: view === 'housekeeping' ? 'Housekeeping (Demo)' : 'Hausdame (Demo)',
+            cleanedAt: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+          }
+        }));
+        showNotification(`Zimmer ${roomNum} als sauber markiert ✓`);
+        setSelectedRoom(null);
+      };
+
+      const markInspected = (roomNum) => {
+        setRooms(prev => ({
+          ...prev,
+          [roomNum]: { ...prev[roomNum], inspected: true }
+        }));
+        showNotification(`Zimmer ${roomNum} kontrolliert ✓✓`);
+        setSelectedRoom(null);
+      };
+
+      const getRoomStyle = (room) => {
+        if (room.inspected) return 'bg-emerald-500 text-white';
+        if (room.status === 'clean') return 'bg-sky-500 text-white';
+        return 'bg-slate-200 text-slate-600';
+      };
+
+      return (
+        <div className="min-h-screen bg-slate-50">
+          {/* Toast */}
+          {showToast && (
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg z-50 animate-pulse">
+              {showToast}
+            </div>
+          )}
+
+          {/* Header */}
+          <div className={`${view === 'hausdame' ? 'bg-gradient-to-br from-purple-600 to-purple-700' : 'bg-gradient-to-br from-sky-600 to-sky-700'} text-white px-5 pt-12 pb-6`}>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="text-white/70 text-xs mb-1">{demoHotel.name}</p>
+                <h1 className="text-xl font-bold">{view === 'hausdame' ? 'Hausdame' : 'Housekeeping'}</h1>
+                <p className="text-white/70 text-sm">{today}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-white/20">
+                  <Icons.Wifi className="w-4 h-4" />
+                </div>
+                <a href="https://topecoxeu-del.github.io/topecopro-website/" className="p-2 bg-white/20 rounded-full">
+                  <Icons.LogOut className="w-4 h-4" />
+                </a>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-4 gap-2 mt-4">
+              <div className="bg-white/20 rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold">{stats.total}</p>
+                <p className="text-xs text-white/70">Gesamt</p>
+              </div>
+              <div className="bg-white/20 rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold">{stats.pending}</p>
+                <p className="text-xs text-white/70">Offen</p>
+              </div>
+              <div className="bg-white/20 rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold">{stats.clean}</p>
+                <p className="text-xs text-white/70">Sauber</p>
+              </div>
+              <div className="bg-white/20 rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold">{stats.inspected}</p>
+                <p className="text-xs text-white/70">Geprüft</p>
+              </div>
+            </div>
+
+            {/* View toggle */}
+            <div className="flex gap-2 mt-4">
+              <button 
+                onClick={() => setView('hausdame')} 
+                className={`flex-1 py-2 rounded-xl text-sm font-medium ${view === 'hausdame' ? 'bg-white text-purple-700' : 'bg-white/20'}`}
+              >
+                Hausdame
+              </button>
+              <button 
+                onClick={() => setView('housekeeping')} 
+                className={`flex-1 py-2 rounded-xl text-sm font-medium ${view === 'housekeeping' ? 'bg-white text-sky-700' : 'bg-white/20'}`}
+              >
+                Housekeeping
+              </button>
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="px-4 py-3 bg-white border-b border-slate-100">
+            <div className="relative">
+              <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Zimmer suchen..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-100 rounded-xl text-sm" 
+              />
+            </div>
+          </div>
+
+          {/* Floor filter */}
+          <div className="flex gap-2 px-4 py-2 overflow-x-auto bg-white border-b border-slate-100 hide-scrollbar">
+            <button onClick={() => setFilterFloor(0)} className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${filterFloor === 0 ? 'bg-sky-600 text-white' : 'bg-slate-100'}`}>Alle</button>
+            {floors.map(f => (
+              <button key={f} onClick={() => setFilterFloor(f)} className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${filterFloor === f ? 'bg-sky-600 text-white' : 'bg-slate-100'}`}>{f}. Stock</button>
+            ))}
+          </div>
+
+          {/* Status filter */}
+          <div className="flex gap-2 px-4 py-2 overflow-x-auto hide-scrollbar">
+            {[{ k: 'all', l: 'Alle' }, { k: 'pending', l: 'Offen' }, { k: 'clean', l: 'Sauber' }, { k: 'inspected', l: '✓✓ Geprüft' }].map(f => (
+              <button key={f.k} onClick={() => setFilterStatus(f.k)} className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${filterStatus === f.k ? (f.k === 'inspected' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-white') : 'bg-white text-slate-600 border border-slate-200'}`}>{f.l}</button>
+            ))}
+          </div>
+
+          {/* Rooms grid */}
+          <div className="p-4 grid grid-cols-5 gap-2">
+            {filteredRooms.map(room => (
+              <button
+                key={room.number}
+                onClick={() => setSelectedRoom(room)}
+                className={`aspect-square rounded-xl flex flex-col items-center justify-center ${getRoomStyle(room)} transition-all active:scale-95`}
+              >
+                <span className="font-bold">{room.number}</span>
+                {room.inspected && <Icons.Check className="w-4 h-4 mt-0.5" />}
+              </button>
+            ))}
+          </div>
+
+          {/* Legend */}
+          <div className="px-4 py-3 flex items-center justify-center gap-4 text-xs text-slate-500">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-slate-200"></span> Offen</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-sky-500"></span> Sauber</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500"></span> Geprüft</span>
+          </div>
+
+          {/* Room detail modal */}
+          {selectedRoom && (
+            <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={() => setSelectedRoom(null)}>
+              <div className="bg-white w-full rounded-t-3xl p-6 pb-10" onClick={e => e.stopPropagation()}>
+                <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-6"></div>
+                <div className="text-center mb-6">
+                  <div className={`w-20 h-20 ${getRoomStyle(selectedRoom)} rounded-2xl flex items-center justify-center mx-auto mb-3`}>
+                    <span className="text-3xl font-bold">{selectedRoom.number}</span>
+                  </div>
+                  <h3 className="text-xl font-bold">Zimmer {selectedRoom.number}</h3>
+                  <p className="text-slate-500">{selectedRoom.floor}. Stock</p>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-slate-500">Status</span>
+                    <span className="font-medium">{selectedRoom.inspected ? 'Geprüft ✓✓' : selectedRoom.status === 'clean' ? 'Sauber' : 'Offen'}</span>
+                  </div>
+                  {selectedRoom.cleanedBy && (
+                    <div className="flex justify-between py-2 border-b border-slate-100">
+                      <span className="text-slate-500">Gereinigt von</span>
+                      <span className="font-medium">{selectedRoom.cleanedBy}</span>
+                    </div>
+                  )}
+                  {selectedRoom.cleanedAt && (
+                    <div className="flex justify-between py-2 border-b border-slate-100">
+                      <span className="text-slate-500">Zeit</span>
+                      <span className="font-medium">{selectedRoom.cleanedAt}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {selectedRoom.status === 'pending' && (
+                    <button onClick={() => markClean(selectedRoom.number)} className="w-full bg-sky-600 text-white py-4 rounded-xl font-semibold">
+                      ✓ Als sauber markieren
+                    </button>
+                  )}
+                  {selectedRoom.status === 'clean' && !selectedRoom.inspected && view === 'hausdame' && (
+                    <button onClick={() => markInspected(selectedRoom.number)} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-semibold">
+                      ✓✓ Kontrolliert
+                    </button>
+                  )}
+                  <button onClick={() => setSelectedRoom(null)} className="w-full bg-slate-100 text-slate-600 py-4 rounded-xl font-medium">
+                    Schließen
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Demo banner */}
+          <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-purple-600 to-sky-600 text-white py-3 px-4 text-center">
+            <p className="text-sm font-medium">
+              🎯 Das ist eine Demo! 
+              <a href="https://topecoxeu-del.github.io/topecopro-website/#contact" className="underline ml-2">Jetzt kostenlos starten →</a>
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<DemoApp />);
+  </script>
+</body>
+</html>
