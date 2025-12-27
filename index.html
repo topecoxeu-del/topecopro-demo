@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TopEcoPro - DEMO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // DEMO DATA - No Firebase, all in memory
+    const DEMO_HOTEL = {
+      id: 'demo-hotel',
+      name: 'Demo Hotel ⭐⭐⭐⭐',
+      rooms: {
+        1: [101, 102, 103, 104, 105, 106, 107, 108],
+        2: [201, 202, 203, 204, 205, 206, 207, 208],
+        3: [301, 302, 303, 304, 305, 306, 307, 308]
+      },
+      staff: [
+        { id: 'hk1', name: 'Maria', pin: '1001', role: 'housekeeper', floors: [1] },
+        { id: 'hk2', name: 'Anna', pin: '1002', role: 'housekeeper', floors: [2] },
+        { id: 'hk3', name: 'Sarah', pin: '1003', role: 'housekeeper', floors: [3] },
+        { id: 'admin', name: 'Hausdame', pin: '0000', role: 'admin' },
+        { id: 'super', name: 'Manager', pin: '9999', role: 'superadmin' }
+      ]
+    };
+
+    const generateDemoRooms = () => {
+      const rooms = {};
+      const statuses = ['pending', 'pending', 'pending', 'clean', 'clean'];
+      const guestStatuses = ['abreise', 'bleibe', 'bb', 'none'];
+      
+      Object.entries(DEMO_HOTEL.rooms).forEach(([floor, roomNums]) => {
+        roomNums.forEach((num, i) => {
+          const status = statuses[Math.floor(Math.random() * statuses.length)];
+          rooms[num] = {
+            id: num,
+            number: String(num),
+            floor: Number(floor),
+            status: status,
+            guestStatus: guestStatuses[Math.floor(Math.random() * guestStatuses.length)],
+            inspected: status === 'clean' && Math.random() > 0.7,
+            problems: [],
+            photos: [],
+            cleanedBy: status === 'clean' ? 'hk' + floor : null,
+            completedAt: status === 'clean' ? new Date().toISOString() : null
+          };
+        });
+      });
+      return rooms;
+    };
+
+    const Icons = {
+      Home: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,
+      Settings: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+      ArrowLeft: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>,
+      Check: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>,
+      LogOut: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>,
+      Search: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>,
+      ChevronRight: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>,
+      AlertTriangle: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+      Camera: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>,
+      X: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+      Clock: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+    };
+
+    function App() {
+      const [currentUser, setCurrentUser] = useState(null);
+      const [rooms, setRooms] = useState(() => generateDemoRooms());
+      const [selectedRoom, setSelectedRoom] = useState(null);
+      const [view, setView] = useState('rooms');
+      const [filterFloor, setFilterFloor] = useState(0);
+      const [filterStatus, setFilterStatus] = useState('all');
+      const [search, setSearch] = useState('');
+      const [workStart, setWorkStart] = useState(null);
+
+      const hotel = DEMO_HOTEL;
+      const roomsArr = Object.values(rooms);
+      const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+
+      const stats = {
+        total: roomsArr.length,
+        inspected: roomsArr.filter(r => r.inspected).length,
+        clean: roomsArr.filter(r => r.status === 'clean' && !r.inspected).length,
+        pending: roomsArr.filter(r => r.status === 'pending').length,
+        abreise: roomsArr.filter(r => r.guestStatus === 'abreise').length,
+        bleibe: roomsArr.filter(r => r.guestStatus === 'bleibe').length,
+        bb: roomsArr.filter(r => r.guestStatus === 'bb').length
+      };
+
+      const filteredRooms = roomsArr.filter(r => {
+        if (currentUser?.role === 'housekeeper' && !(currentUser.floors || []).includes(r.floor)) return false;
+        if (filterFloor > 0 && r.floor !== filterFloor) return false;
+        if (filterStatus !== 'all') {
+          if (filterStatus === 'inspected' && !r.inspected) return false;
+          if (filterStatus === 'clean' && (r.status !== 'clean' || r.inspected)) return false;
+          if (filterStatus === 'pending' && r.status !== 'pending') return false;
+        }
+        if (search && !r.number.includes(search)) return false;
+        return true;
+      }).sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
+
+      const updateRoom = (id, data) => {
+        setRooms(prev => ({
+          ...prev,
+          [id]: { ...prev[id], ...data }
+        }));
+      };
+
+      const getColor = (room) => {
+        if (room.inspected) return 'bg-gradient-to-br from-emerald-500 to-emerald-600';
+        if (room.status === 'clean') return 'bg-gradient-to-br from-sky-500 to-sky-600';
+        return 'bg-gradient-to-br from-slate-400 to-slate-500';
+      };
+
+      const getLabel = (room) => {
+        if (room.inspected) return '✓✓ Kontrolliert';
+        if (room.status === 'clean') return '✓ Fertig';
+        return 'Offen';
+      };
+
+      const getGuestColor = (status) => {
+        if (status === 'abreise') return 'bg-rose-100 text-rose-700';
+        if (status === 'bleibe') return 'bg-amber-100 text-amber-700';
+        if (status === 'bb') return 'bg-violet-100 text-violet-700';
+        return 'bg-slate-100 text-slate-600';
+      };
+
+      const getStaff = (id) => hotel.staff?.find(s => s.id === id)?.name || id;
+
+      // LOGIN
+      if (!currentUser) {
+        return <Login hotel={hotel} onLogin={(user) => { setCurrentUser(user); setWorkStart(new Date().toISOString()); }} />;
+      }
+
+      // ROOM DETAIL
+      if (selectedRoom) {
+        const room = rooms[selectedRoom.id] || selectedRoom;
+        return (
+          <RoomDetail
+            room={room}
+            user={currentUser}
+            onBack={() => setSelectedRoom(null)}
+            onStatus={(id, status) => {
+              updateRoom(id, { 
+                status, 
+                cleanedBy: status === 'clean' ? currentUser.id : null,
+                completedAt: status === 'clean' ? new Date().toISOString() : null,
+                inspected: false
+              });
+            }}
+            onGuest={(id, guestStatus) => updateRoom(id, { guestStatus })}
+            onInspect={(id, inspected) => updateRoom(id, { inspected })}
+            getColor={getColor}
+            getLabel={getLabel}
+            getGuestColor={getGuestColor}
+            getStaff={getStaff}
+          />
+        );
+      }
+
+      const availableFloors = Object.keys(hotel.rooms || {}).map(Number).sort((a,b) => a-b);
+
+      return (
+        <div className="min-h-screen bg-slate-100 flex flex-col">
+          {/* Demo Banner */}
+          <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium">
+            🎮 DEMO MODUS - Daten werden nicht gespeichert
+          </div>
+
+          {/* Header */}
+          <div className="bg-gradient-to-r from-purple-700 to-sky-600 text-white px-5 pt-6 pb-4">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h1 className="text-xl font-bold">{hotel.name}</h1>
+                <p className="text-white/70 text-sm">{currentUser.name}</p>
+              </div>
+              <button onClick={() => setCurrentUser(null)} className="p-2 bg-white/20 rounded-xl">
+                <Icons.LogOut className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-4 gap-2">
+              <div className="bg-white/20 rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold">{stats.pending}</div>
+                <div className="text-xs text-white/80">Offen</div>
+              </div>
+              <div className="bg-white/20 rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold">{stats.clean}</div>
+                <div className="text-xs text-white/80">Fertig</div>
+              </div>
+              <div className="bg-white/20 rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold">{stats.inspected}</div>
+                <div className="text-xs text-white/80">Geprüft</div>
+              </div>
+              <div className="bg-white/20 rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold">{stats.total}</div>
+                <div className="text-xs text-white/80">Gesamt</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="px-4 py-3 bg-white border-b border-slate-100">
+            <div className="relative">
+              <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Zimmer suchen..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-100 rounded-xl text-sm" 
+              />
+            </div>
+          </div>
+
+          {/* Floor Filter */}
+          <div className="px-4 py-2 bg-white border-b flex gap-2 overflow-x-auto hide-scrollbar">
+            <button 
+              onClick={() => setFilterFloor(0)} 
+              className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${filterFloor === 0 ? 'bg-purple-600 text-white' : 'bg-slate-100'}`}
+            >
+              Alle
+            </button>
+            {availableFloors.map(f => (
+              <button 
+                key={f} 
+                onClick={() => setFilterFloor(f)} 
+                className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${filterFloor === f ? 'bg-purple-600 text-white' : 'bg-slate-100'}`}
+              >
+                {f}. Stock
+              </button>
+            ))}
+          </div>
+
+          {/* Status Filter */}
+          <div className="px-4 py-2 bg-white border-b flex gap-2 overflow-x-auto hide-scrollbar">
+            {[
+              { id: 'all', label: 'Alle' },
+              { id: 'pending', label: 'Offen', color: 'bg-slate-200' },
+              { id: 'clean', label: 'Fertig', color: 'bg-sky-100 text-sky-700' },
+              { id: 'inspected', label: 'Geprüft', color: 'bg-emerald-100 text-emerald-700' }
+            ].map(s => (
+              <button 
+                key={s.id} 
+                onClick={() => setFilterStatus(s.id)} 
+                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${filterStatus === s.id ? 'ring-2 ring-purple-500 ring-offset-1' : ''} ${s.color || 'bg-slate-100'}`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Rooms Grid */}
+          <div className="flex-1 overflow-auto p-4">
+            <div className="grid grid-cols-4 gap-2">
+              {filteredRooms.map(room => (
+                <button
+                  key={room.id}
+                  onClick={() => setSelectedRoom(room)}
+                  className={`${getColor(room)} rounded-xl p-3 text-white text-center relative`}
+                >
+                  <div className="text-lg font-bold">{room.number}</div>
+                  <div className="text-xs opacity-80">
+                    {room.guestStatus === 'abreise' ? 'AB' : room.guestStatus === 'bleibe' ? 'BL' : room.guestStatus === 'bb' ? 'BB' : '-'}
+                  </div>
+                  {room.inspected && (
+                    <div className="absolute top-1 right-1 text-xs">✓✓</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Bottom Info */}
+          <div className="bg-white border-t p-4 text-center text-xs text-slate-500">
+            <a href="https://topecoxeu-del.github.io/topecopro-website" className="text-purple-600 font-medium">
+              ← Zurück zur Website
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    function Login({ hotel, onLogin }) {
+      const [pin, setPin] = useState('');
+      const [error, setError] = useState('');
+
+      const handlePin = (digit) => {
+        if (pin.length < 4) {
+          const newPin = pin + digit;
+          setPin(newPin);
+          if (newPin.length === 4) {
+            const user = hotel.staff?.find(s => s.pin === newPin);
+            if (user) {
+              onLogin(user);
+            } else {
+              setError('Falscher PIN');
+              setTimeout(() => { setPin(''); setError(''); }, 1000);
+            }
+          }
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-purple-700 via-purple-600 to-sky-600 flex flex-col">
+          {/* Demo Banner */}
+          <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium">
+            🎮 DEMO - Testen Sie mit PIN: 1001, 0000, oder 9999
+          </div>
+
+          <div className="flex-1 flex flex-col items-center justify-center p-8">
+            <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center mb-6">
+              <span className="text-4xl">🏨</span>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-1">{hotel.name}</h1>
+            <p className="text-white/60 mb-8">Housekeeping Login</p>
+
+            {/* PIN Display */}
+            <div className="flex gap-3 mb-8">
+              {[0,1,2,3].map(i => (
+                <div key={i} className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold ${pin.length > i ? 'bg-white text-purple-700' : 'bg-white/20 text-white/40'}`}>
+                  {pin.length > i ? '•' : ''}
+                </div>
+              ))}
+            </div>
+
+            {error && (
+              <div className="bg-rose-500 text-white px-4 py-2 rounded-xl mb-4 font-medium">{error}</div>
+            )}
+
+            {/* Numpad */}
+            <div className="grid grid-cols-3 gap-3 w-full max-w-xs">
+              {[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map((n, i) => (
+                <button
+                  key={i}
+                  onClick={() => n === '⌫' ? setPin(pin.slice(0,-1)) : n !== '' && handlePin(String(n))}
+                  className={`h-16 rounded-2xl text-2xl font-bold transition-all ${n === '' ? 'invisible' : 'bg-white/20 text-white active:bg-white/30'}`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-8 text-white/60 text-sm">
+              Demo PINs: 1001 (HK), 0000 (Admin), 9999 (Manager)
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function RoomDetail({ room, user, onBack, onStatus, onGuest, onInspect, getColor, getLabel, getGuestColor, getStaff }) {
+      const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+
+      return (
+        <div className="min-h-screen bg-slate-50 pb-24">
+          <div className={`${getColor(room)} px-5 pt-12 pb-8`}>
+            <div className="flex items-center justify-between mb-4">
+              <button onClick={onBack} className="text-white/80"><Icons.ArrowLeft className="w-6 h-6" /></button>
+              {room.inspected && <span className="bg-white/30 text-white px-3 py-1 rounded-full text-sm">✓✓</span>}
+            </div>
+            <div className="text-center">
+              <h1 className="text-5xl font-bold text-white mb-2">{room.number}</h1>
+              <p className="text-white/80">{getLabel(room)}</p>
+            </div>
+          </div>
+
+          {/* Guest Status */}
+          <div className="px-4 -mt-4 mb-4">
+            <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <p className="text-xs text-slate-500 mb-2">Gast-Status</p>
+              <div className="flex gap-2">
+                {['abreise', 'bleibe', 'bb', 'none'].map(s => (
+                  <button
+                    key={s}
+                    onClick={() => onGuest(room.id, s)}
+                    className={`flex-1 py-2 rounded-xl text-sm font-medium ${room.guestStatus === s ? getGuestColor(s) + ' ring-2 ring-offset-1 ring-purple-500' : 'bg-slate-100'}`}
+                  >
+                    {s === 'abreise' ? 'Abreise' : s === 'bleibe' ? 'Bleibe' : s === 'bb' ? 'BB' : '-'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Status Buttons */}
+          <div className="px-4 mb-4">
+            <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <p className="text-xs text-slate-500 mb-2">Zimmer-Status</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => onStatus(room.id, 'pending')}
+                  className={`flex-1 py-4 rounded-xl font-medium ${room.status === 'pending' && !room.inspected ? 'bg-slate-600 text-white' : 'bg-slate-100'}`}
+                >
+                  Offen
+                </button>
+                <button
+                  onClick={() => onStatus(room.id, 'clean')}
+                  className={`flex-1 py-4 rounded-xl font-medium ${room.status === 'clean' && !room.inspected ? 'bg-sky-600 text-white' : 'bg-sky-100 text-sky-700'}`}
+                >
+                  ✓ Fertig
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Inspect Button (Admin only) */}
+          {isAdmin && room.status === 'clean' && (
+            <div className="px-4 mb-4">
+              <button
+                onClick={() => onInspect(room.id, !room.inspected)}
+                className={`w-full py-4 rounded-xl font-medium ${room.inspected ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700'}`}
+              >
+                {room.inspected ? '✓✓ Kontrolliert' : 'Als kontrolliert markieren'}
+              </button>
+            </div>
+          )}
+
+          {/* Info */}
+          <div className="px-4">
+            <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <p className="text-xs text-slate-500 mb-2">Informationen</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Etage</span>
+                  <span>{room.floor}. Stock</span>
+                </div>
+                {room.cleanedBy && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Gereinigt von</span>
+                    <span>{getStaff(room.cleanedBy)}</span>
+                  </div>
+                )}
+                {room.completedAt && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Zeit</span>
+                    <span>{new Date(room.completedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
